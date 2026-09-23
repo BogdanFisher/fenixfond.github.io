@@ -1,1 +1,587 @@
+// ============================================
+// main.js — инициализация
+// ============================================
 
+import gsap from 'gsap';
+import ScrollTrigger from 'gsap/ScrollTrigger';
+import Lenis from '@studio-freight/lenis';
+
+gsap.registerPlugin(ScrollTrigger);
+
+// Инициализация плавного скролла
+const lenis = new Lenis({
+    duration: 1.2,
+    easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+    smoothWheel: true,
+    smoothTouch: false
+});
+
+lenis.on('scroll', ScrollTrigger.update);
+
+gsap.ticker.add((time) => {
+    lenis.raf(time * 1000);
+});
+
+gsap.ticker.lagSmoothing(0);
+
+// Проверка на отключение анимации
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const isMobile = window.matchMedia('(max-width: 768px)').matches;
+
+export { lenis, prefersReducedMotion, isMobile };
+
+
+// ============================================
+// utils.js — вспомогательные функции
+// ============================================
+
+// Форматирование чисел
+export function formatNumber(num) {
+    return num.toLocaleString('ru-RU');
+}
+
+// Проверка, в зоне ли видимости
+export function isInViewport(element) {
+    const rect = element.getBoundingClientRect();
+    return (
+        rect.top < window.innerHeight &&
+        rect.bottom > 0
+    );
+}
+
+// Debounce
+export function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Throttle
+export function throttle(func, limit) {
+    let inThrottle;
+    return function (...args) {
+        if (!inThrottle) {
+            func.apply(this, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    };
+}
+
+
+// ============================================
+// scroll-animations.js — анимации появления
+// ============================================
+
+import gsap from 'gsap';
+import ScrollTrigger from 'gsap/ScrollTrigger';
+import { prefersReducedMotion, isMobile } from './main.js';
+
+gsap.registerPlugin(ScrollTrigger);
+
+// Анимация появления элементов с data-animate
+export function initScrollAnimations() {
+    if (prefersReducedMotion) {
+        // Если анимация отключена — показать всё сразу
+        document.querySelectorAll('[data-animate]').forEach(el => {
+            el.style.opacity = '1';
+            el.style.transform = 'none';
+        });
+        return;
+    }
+
+    const elements = document.querySelectorAll('[data-animate]');
+
+    elements.forEach((el) => {
+        const type = el.dataset.animate;
+        const delay = parseFloat(el.dataset.delay) || 0;
+
+        let fromVars = { opacity: 0 };
+        let toVars = { opacity: 1, duration: 0.8, delay, ease: 'power2.out' };
+
+        switch (type) {
+            case 'fade-up':
+                fromVars.y = 30;
+                toVars.y = 0;
+                break;
+            case 'slide-left':
+                fromVars.x = -50;
+                toVars.x = 0;
+                break;
+            case 'slide-right':
+                fromVars.x = 50;
+                toVars.x = 0;
+                break;
+            case 'slide-up':
+                fromVars.y = 50;
+                toVars.y = 0;
+                break;
+        }
+
+        gsap.fromTo(el, fromVars, {
+            ...toVars,
+            scrollTrigger: {
+                trigger: el,
+                start: 'top 85%',
+                toggleActions: 'play none none none'
+            }
+        });
+    });
+}
+
+// Анимация шапки при скролле
+export function initHeaderScroll() {
+    const header = document.querySelector('.header');
+    if (!header) return;
+
+    ScrollTrigger.create({
+        start: 'top -80',
+        onUpdate: (self) => {
+            if (self.direction === 1 && self.scroll() > 80) {
+                header.classList.add('header--scrolled');
+            } else if (self.scroll() <= 80) {
+                header.classList.remove('header--scrolled');
+            }
+        }
+    });
+}
+
+
+// ============================================
+// counters.js — анимация счётчиков
+// ============================================
+
+import gsap from 'gsap';
+import ScrollTrigger from 'gsap/ScrollTrigger';
+import { formatNumber } from './utils.js';
+import { prefersReducedMotion } from './main.js';
+
+gsap.registerPlugin(ScrollTrigger);
+
+export function initCounters() {
+    const counters = document.querySelectorAll('.counter');
+
+    counters.forEach((counter) => {
+        const target = parseFloat(counter.dataset.target);
+        const duration = 2.5;
+
+        if (prefersReducedMotion) {
+            counter.textContent = formatNumber(target);
+            return;
+        }
+
+        ScrollTrigger.create({
+            trigger: counter,
+            start: 'top 85%',
+            once: true,
+            onEnter: () => {
+                gsap.to(counter, {
+                    innerText: target,
+                    duration: duration,
+                    ease: 'power2.out',
+                    snap: { innerText: 1 },
+                    onUpdate: function () {
+                        const value = Math.ceil(this.targets()[0].innerText);
+                        counter.textContent = formatNumber(value);
+                    }
+                });
+            }
+        });
+    });
+}
+
+
+// ============================================
+// motion-path.js — анимация летящего рубля
+// ============================================
+
+import gsap from 'gsap';
+import ScrollTrigger from 'gsap/ScrollTrigger';
+import MotionPathPlugin from 'gsap/MotionPathPlugin';
+import { prefersReducedMotion, isMobile } from './main.js';
+
+gsap.registerPlugin(ScrollTrigger, MotionPathPlugin);
+
+export function initCoinAnimation() {
+    const coin = document.querySelector('.coin');
+    const flash = document.querySelector('.coin-section__flash');
+    const path = document.querySelector('#coin-path');
+
+    if (!coin || !path || prefersReducedMotion || isMobile) {
+        if (coin) coin.style.display = 'none';
+        return;
+    }
+
+    // Таймлайн анимации
+    const tl = gsap.timeline({
+        scrollTrigger: {
+            trigger: '.coin-section',
+            start: 'top 80%',
+            end: 'bottom 20%',
+            scrub: 1
+        }
+    });
+
+    tl.set(coin, { opacity: 1 })
+      .to(coin, {
+          motionPath: {
+              path: path,
+              align: path,
+              alignOrigin: [0.5, 0.5],
+              autoRotate: true
+          },
+          duration: 1,
+          ease: 'none'
+      })
+      .to(flash, {
+          opacity: 1,
+          scale: 1.5,
+          duration: 0.2,
+          ease: 'power2.out'
+      }, '-=0.1')
+      .to(flash, {
+          opacity: 0,
+          scale: 2,
+          duration: 0.3,
+          ease: 'power2.out'
+      })
+      .to(coin, {
+          opacity: 0,
+          scale: 0,
+          duration: 0.2
+      });
+}
+
+
+// ============================================
+// building.js — анимация сборки здания
+// ============================================
+
+import gsap from 'gsap';
+import ScrollTrigger from 'gsap/ScrollTrigger';
+import { prefersReducedMotion } from './main.js';
+
+gsap.registerPlugin(ScrollTrigger);
+
+export function initBuildingAnimation() {
+    const bricksContainer = document.querySelector('#bricks');
+    if (!bricksContainer) return;
+
+    // Генерация кирпичиков
+    const totalBricks = 60;
+    const bricksPerRow = 10;
+
+    for (let i = 0; i < totalBricks; i++) {
+        const brick = document.createElement('div');
+        brick.className = 'brick';
+        brick.style.setProperty('--index', i);
+        bricksContainer.appendChild(brick);
+    }
+
+    const bricks = bricksContainer.querySelectorAll('.brick');
+
+    if (prefersReducedMotion) {
+        bricks.forEach(brick => {
+            brick.style.opacity = '1';
+            brick.style.transform = 'none';
+        });
+        return;
+    }
+
+    // Анимация сборки
+    ScrollTrigger.create({
+        trigger: '.building-section',
+        start: 'top 80%',
+        end: 'bottom 30%',
+        scrub: 1,
+        onUpdate: (self) => {
+            const progress = self.progress;
+            const visibleCount = Math.floor(progress * bricks.length);
+
+            bricks.forEach((brick, index) => {
+                if (index < visibleCount) {
+                    gsap.to(brick, {
+                        opacity: 1,
+                        y: 0,
+                        duration: 0.3,
+                        ease: 'power2.out',
+                        overwrite: true
+                    });
+                } else {
+                    gsap.to(brick, {
+                        opacity: 0,
+                        y: 100,
+                        duration: 0.3,
+                        ease: 'power2.out',
+                        overwrite: true
+                    });
+                }
+            });
+        }
+    });
+}
+
+
+// ============================================
+// map.js — анимация карты проектов
+// ============================================
+
+import gsap from 'gsap';
+import ScrollTrigger from 'gsap/ScrollTrigger';
+import { prefersReducedMotion } from './main.js';
+
+gsap.registerPlugin(ScrollTrigger);
+
+const projects = [
+    { id: 1, x: 150, y: 200, title: 'Школа №5', city: 'Иркутск', status: 'Завершён' },
+    { id: 2, x: 300, y: 150, title: 'Больница №3', city: 'Тверь', status: 'Строится' },
+    { id: 3, x: 450, y: 250, title: 'Парк «Северный»', city: 'Новгород', status: 'Завершён' },
+    { id: 4, x: 600, y: 180, title: 'Завод микроэлектроники', city: 'Зеленоград', status: 'Строится' },
+    { id: 5, x: 750, y: 300, title: 'Школа №12', city: 'Казань', status: 'Планируется' }
+];
+
+export function initMapAnimation() {
+    const mapPoints = document.querySelector('#map-points');
+    const popup = document.querySelector('#map-popup');
+    const popupTitle = document.querySelector('.map__popup-title');
+    const popupText = document.querySelector('.map__popup-text');
+
+    if (!mapPoints) return;
+
+    // Генерация точек
+    projects.forEach((project, index) => {
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', project.x);
+        circle.setAttribute('cy', project.y);
+        circle.setAttribute('r', '8');
+        circle.setAttribute('fill', '#4CAF50');
+        circle.setAttribute('class', 'map-point');
+        circle.dataset.id = project.id;
+        circle.style.opacity = '0';
+        circle.style.transform = 'scale(0)';
+        circle.style.transformOrigin = `${project.x}px ${project.y}px`;
+        circle.style.cursor = 'pointer';
+
+        circle.addEventListener('click', () => {
+            popupTitle.textContent = project.title;
+            popupText.textContent = `${project.city} — ${project.status}`;
+            popup.style.left = `${project.x}px`;
+            popup.style.top = `${project.y - 120}px`;
+            popup.classList.add('map__popup--visible');
+        });
+
+        mapPoints.appendChild(circle);
+    });
+
+    const points = mapPoints.querySelectorAll('.map-point');
+
+    // Анимация появления точек
+    if (!prefersReducedMotion) {
+        ScrollTrigger.create({
+            trigger: '.map-section',
+            start: 'top 70%',
+            once: true,
+            onEnter: () => {
+                points.forEach((point, index) => {
+                    gsap.to(point, {
+                        opacity: 1,
+                        scale: 1,
+                        duration: 0.5,
+                        delay: index * 0.15,
+                        ease: 'back.out(1.7)'
+                    });
+                });
+            }
+        });
+    } else {
+        points.forEach(point => {
+            point.style.opacity = '1';
+            point.style.transform = 'scale(1)';
+        });
+    }
+
+    // Закрытие попапа при клике вне
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.map-point') && !e.target.closest('.map__popup')) {
+            popup.classList.remove('map__popup--visible');
+        }
+    });
+}
+
+
+// ============================================
+// reports.js — анимация графиков
+// ============================================
+
+import gsap from 'gsap';
+import ScrollTrigger from 'gsap/ScrollTrigger';
+import DrawSVGPlugin from 'gsap/DrawSVGPlugin';
+import { prefersReducedMotion } from './main.js';
+
+gsap.registerPlugin(ScrollTrigger, DrawSVGPlugin);
+
+export function initReportsAnimation() {
+    const charts = document.querySelectorAll('.report-card__chart');
+
+    charts.forEach((chart) => {
+        const lines = chart.querySelectorAll('.chart-line');
+        const bars = chart.querySelectorAll('.chart-bar');
+        const circles = chart.querySelectorAll('.chart-circle');
+
+        if (prefersReducedMotion) {
+            lines.forEach(line => line.style.strokeDasharray = 'none');
+            bars.forEach(bar => bar.style.transform = 'scaleY(1)');
+            circles.forEach(circle => circle.style.transform = 'scale(1)');
+            return;
+        }
+
+        ScrollTrigger.create({
+            trigger: chart,
+            start: 'top 80%',
+            once: true,
+            onEnter: () => {
+                // Анимация линий
+                if (lines.length) {
+                    gsap.from(lines, {
+                        drawSVG: '0%',
+                        duration: 1.5,
+                        ease: 'power2.out',
+                        stagger: 0.2
+                    });
+                }
+
+                // Анимация столбцов
+                if (bars.length) {
+                    gsap.from(bars, {
+                        scaleY: 0,
+                        transformOrigin: 'bottom',
+                        duration: 1,
+                        ease: 'power2.out',
+                        stagger: 0.1
+                    });
+                }
+
+                // Анимация кругов
+                if (circles.length) {
+                    gsap.from(circles, {
+                        scale: 0,
+                        transformOrigin: 'center',
+                        duration: 1,
+                        ease: 'back.out(1.7)',
+                        stagger: 0.2
+                    });
+                }
+            }
+        });
+    });
+}
+
+
+// ============================================
+// hero.js — анимация Hero-секции
+// ============================================
+
+import gsap from 'gsap';
+import { prefersReducedMotion } from './main.js';
+
+export function initHeroAnimation() {
+    if (prefersReducedMotion) return;
+
+    // Анимация появления заголовка
+    const tl = gsap.timeline({ delay: 0.3 });
+
+    tl.from('.hero__title', {
+        opacity: 0,
+        y: 50,
+        duration: 1,
+        ease: 'power3.out'
+    })
+    .from('.hero__subtitle', {
+        opacity: 0,
+        y: 30,
+        duration: 0.8,
+        ease: 'power3.out'
+    }, '-=0.5')
+    .from('.hero__actions .btn', {
+        opacity: 0,
+        y: 20,
+        duration: 0.6,
+        stagger: 0.15,
+        ease: 'power3.out'
+    }, '-=0.4')
+    .from('.hero__scroll-hint', {
+        opacity: 0,
+        duration: 0.5
+    }, '-=0.2');
+
+    // Анимация частиц
+    initParticles();
+}
+
+function initParticles() {
+    const container = document.querySelector('#particles');
+    if (!container) return;
+
+    const particleCount = 30;
+
+    for (let i = 0; i < particleCount; i++) {
+        const particle = document.createElement('div');
+        particle.className = 'particle';
+        particle.style.cssText = `
+            position: absolute;
+            width: ${Math.random() * 4 + 2}px;
+            height: ${Math.random() * 4 + 2}px;
+            background: rgba(255, 255, 255, ${Math.random() * 0.3 + 0.1});
+            border-radius: 50%;
+            left: ${Math.random() * 100}%;
+            top: ${Math.random() * 100}%;
+        `;
+        container.appendChild(particle);
+
+        gsap.to(particle, {
+            y: `-=${Math.random() * 100 + 50}`,
+            x: `+=${Math.random() * 50 - 25}`,
+            opacity: 0,
+            duration: Math.random() * 5 + 5,
+            repeat: -1,
+            delay: Math.random() * 5,
+            ease: 'none'
+        });
+    }
+}
+
+
+// ============================================
+// index.js — точка входа
+// ============================================
+
+import { initScrollAnimations, initHeaderScroll } from './scroll-animations.js';
+import { initCounters } from './counters.js';
+import { initCoinAnimation } from './motion-path.js';
+import { initBuildingAnimation } from './building.js';
+import { initMapAnimation } from './map.js';
+import { initReportsAnimation } from './reports.js';
+import { initHeroAnimation } from './hero.js';
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Инициализация всех анимаций
+    initHeroAnimation();
+    initScrollAnimations();
+    initHeaderScroll();
+    initCounters();
+    initCoinAnimation();
+    initBuildingAnimation();
+    initMapAnimation();
+    initReportsAnimation();
+
+    // Обновление ScrollTrigger после загрузки всех ресурсов
+    window.addEventListener('load', () => {
+        ScrollTrigger.refresh();
+    });
+});
